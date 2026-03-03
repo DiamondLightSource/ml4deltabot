@@ -133,31 +133,43 @@ class DeltabotDatasetFromDataFrame:
 
         return X, y
 
-    def create_temporal_split(
+    def create_split(
         self,
         X: np.ndarray,
         y: np.ndarray,
-        train_split: float = 0.8
+        train_split: float = 0.8,
+        random_split: bool = True,
+        seed: int = 42
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Create temporal train/test split (preserves time order).
+        Create train/test split.
 
         Args:
             X: Features
             y: Targets
             train_split: Fraction of data for training (default: 0.8)
+            random_split: If True, random split. If False, temporal split (default: True)
+            seed: Random seed for splitting
 
         Returns:
             Tuple of (X_train, X_test, y_train, y_test)
         """
-        split_idx = int(len(X) * train_split)
+        if random_split:
+            # Random split - samples from all voltage levels
+            from sklearn.model_selection import train_test_split
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=(1-train_split), random_state=seed
+            )
+            print(f"\nRandom split:")
+        else:
+            # Temporal split - preserves time order
+            split_idx = int(len(X) * train_split)
+            X_train = X[:split_idx]
+            X_test = X[split_idx:]
+            y_train = y[:split_idx]
+            y_test = y[split_idx:]
+            print(f"\nTemporal split:")
 
-        X_train = X[:split_idx]
-        X_test = X[split_idx:]
-        y_train = y[:split_idx]
-        y_test = y[split_idx:]
-
-        print(f"\nTemporal split:")
         print(f"  Train: {X_train.shape[0]} samples ({train_split*100:.0f}%)")
         print(f"  Test:  {X_test.shape[0]} samples ({(1-train_split)*100:.0f}%)")
 
@@ -211,7 +223,8 @@ class DeltabotDatasetFromDataFrame:
         train_split: float = 0.8,
         batch_size: int = 1024,
         shuffle_buffer: int = 10000,
-        scale_data: bool = True
+        scale_data: bool = True,
+        random_split: bool = True
     ) -> Tuple[tf.data.Dataset, tf.data.Dataset, int, int, Optional[StandardScaler], Optional[StandardScaler]]:
         """
         Args:
@@ -219,6 +232,7 @@ class DeltabotDatasetFromDataFrame:
             batch_size: Batch size (default: 1024)
             shuffle_buffer: Shuffle buffer size (default: 10000)
             scale_data: Whether to scale the data (default: True)
+            random_split: If True, random split. If False, temporal split (default: True)
 
         Returns:
             Tuple of (train_dataset, test_dataset, input_dim, output_dim, X_scaler, y_scaler)
@@ -234,9 +248,9 @@ class DeltabotDatasetFromDataFrame:
             print("  Features scaled (positions + voltage_level)")
             print("  Targets scaled (voltages + derivatives)")
 
-        # Temporal split
-        X_train, X_test, y_train, y_test = self.create_temporal_split(
-            X, y, train_split=train_split
+        # Split data
+        X_train, X_test, y_train, y_test = self.create_split(
+            X, y, train_split=train_split, random_split=random_split
         )
 
         # Create TensorFlow datasets
@@ -258,7 +272,7 @@ class DeltabotDatasetFromDataFrame:
         y_scaler = self.y_scaler if scale_data else None
 
         if scale_data:
-            print(f"\nScalers available for inverse transform")
+            print(f"\n Scalers available for inverse transform")
 
         return train_ds, test_ds, input_dim, output_dim, X_scaler, y_scaler
 
@@ -269,9 +283,12 @@ def create_datasets_from_dataframe(
     train_split: float = 0.8,
     batch_size: int = 1024,
     shuffle_buffer: int = 10000,
-    scale_data: bool = True
+    scale_data: bool = True,
+    random_split: bool = True
 ) -> Tuple[tf.data.Dataset, tf.data.Dataset, int, int, Optional[StandardScaler], Optional[StandardScaler]]:
     """
+    Quick function to create datasets from a DataFrame with voltage_level column.
+
     Args:
         df: DataFrame with voltage_level column
         window_length: Sliding window length (default: 3)
@@ -279,6 +296,7 @@ def create_datasets_from_dataframe(
         batch_size: Batch size (default: 1024)
         shuffle_buffer: Shuffle buffer size (default: 10000)
         scale_data: Whether to scale features and targets (default: True)
+        random_split: If True, random split. If False, temporal split (default: True)
 
     Returns:
         Tuple of (train_dataset, test_dataset, input_dim, output_dim, X_scaler, y_scaler)
@@ -292,13 +310,13 @@ def create_datasets_from_dataframe(
         # Concatenate
         df_all = pd.concat([df_6V, df_3V, df_1p5V], ignore_index=True)
 
-        # Create datasets
+        # Create datasets with random split (recommended for multi-voltage)
         train_ds, test_ds, in_dim, out_dim, X_scaler, y_scaler = \
-            create_datasets_from_dataframe(df_all)
+            create_datasets_from_dataframe(df_all, random_split=True)
 
         # Train
         model = build_nn_model(in_dim, out_dim)
         model.fit(train_ds, validation_data=test_ds, epochs=100)
     """
     dataset_creator = DeltabotDatasetFromDataFrame(df, window_length=window_length)
-    return dataset_creator.get_datasets(train_split, batch_size, shuffle_buffer, scale_data)
+    return dataset_creator.get_datasets(train_split, batch_size, shuffle_buffer, scale_data, random_split)
