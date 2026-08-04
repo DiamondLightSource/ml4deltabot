@@ -20,7 +20,7 @@ COL = dict(x_in=1, y_in=3, z_in=5, x_out=7, y_out=8, z_out=9)
 
 TARGETS = ("position", "velocity")
 
-DT = 1.0
+DT = 0.0001
 
 TOLERANCES = dict(position=10.0, velocity=50.0)
 
