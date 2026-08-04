@@ -26,31 +26,55 @@ def load_file(path):
     ], axis=1).astype(np.float32)
 
 
-def build_sequences(data, window_size):
+TARGET_COLUMNS = dict(
+    position=(["x_out", "y_out", "z_out"], slice(3, 6)),
+    voltage=(["x_in", "y_in", "z_in"], slice(0, 3)),
+)
+
+
+def build_sequences(data, window_size, dt=cfg.DT, targets=cfg.TARGETS):
     """
-    Sliding windows: X (N-W, W, 6) raw sequence, Y (N-W, 3) position at next step
-    (one-step-ahead prediction).
+    Sliding windows: X (N-W, W, 6) raw sequence, Y (N-W, len(targets)*3) at
+    next step (one-step-ahead prediction). targets is a subset of
+    ("position", "velocity", "voltage"); "velocity" is the finite-difference
+    of position between the window's last step and the target step, /dt.
+    Returns X, Y, target_names.
     """
     N, W = len(data), window_size
     n_seq = N - W
     idx = np.arange(W)[None, :] + np.arange(n_seq)[:, None]
     X = data[idx]
-    Y = data[W:, 3:]
-    return X.astype(np.float32), Y.astype(np.float32)
+
+    pos_now = data[W - 1:-1, 3:6]
+    pos_next = data[W:, 3:6]
+
+    parts, names = [], []
+    for t in targets:
+        if t == "velocity":
+            parts.append((pos_next - pos_now) / dt)
+            names += ["vx", "vy", "vz"]
+        else:
+            cols, sl = TARGET_COLUMNS[t]
+            parts.append(data[W:, sl])
+            names += cols
+
+    Y = np.concatenate(parts, axis=1)
+    return X.astype(np.float32), Y.astype(np.float32), names
 
 
-def load_all_files(paths, label):
+def load_all_files(paths, label, window_size=cfg.WINDOW_SIZE):
     X_list, Y_list = [], []
+    target_names = None
     for p in paths:
-        X, Y = build_sequences(load_file(p), cfg.WINDOW_SIZE)
+        X, Y, target_names = build_sequences(load_file(p), window_size)
         X_list.append(X)
         Y_list.append(Y)
         print(f"  {os.path.basename(p):40s}  {len(X):>8,} seqs")
     X_all = np.vstack(X_list)
     Y_all = np.vstack(Y_list)
     print(f"  {'Total ' + label:40s}  {len(X_all):>8,} seqs  "
-          f"X={X_all.shape}  Y={Y_all.shape}")
-    return X_all, Y_all
+          f"X={X_all.shape}  Y={Y_all.shape}  targets={target_names}")
+    return X_all, Y_all, target_names
 
 
 def split_files(data_dir, train_ratio, seed):

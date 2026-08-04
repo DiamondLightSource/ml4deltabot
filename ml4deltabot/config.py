@@ -18,6 +18,12 @@ STEPS_PER_EXECUTION = 100
 # Column indices in the raw txt file (10 columns total)
 COL = dict(x_in=1, y_in=3, z_in=5, x_out=7, y_out=8, z_out=9)
 
+TARGETS = ("position", "velocity")
+
+DT = 1.0
+
+TOLERANCES = dict(position=10.0, velocity=50.0)
+
 MODEL_OUT = "gru_64.keras"
 CHECKPOINT_OUT = "best_gru.keras"
 NORM_STATS_OUT = "normalisation_stats_gru.npz"

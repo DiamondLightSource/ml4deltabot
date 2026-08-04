@@ -15,10 +15,10 @@ def plot_loss_curves(history, out_path):
     ax1.legend()
     ax1.grid(True)
 
-    ax2.plot(epochs_ran, history.history["physical_mae_nm"], label="train MAE (nm)")
-    ax2.plot(epochs_ran, history.history["val_physical_mae_nm"], label="val MAE (nm)")
+    ax2.plot(epochs_ran, history.history["physical_mae"], label="train MAE")
+    ax2.plot(epochs_ran, history.history["val_physical_mae"], label="val MAE")
     ax2.set_xlabel("Epoch")
-    ax2.set_ylabel("MAE (nm)")
+    ax2.set_ylabel("MAE (physical units)")
     ax2.legend()
     ax2.grid(True)
 

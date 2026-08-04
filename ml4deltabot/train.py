@@ -1,3 +1,6 @@
+import argparse
+import os
+
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -8,6 +11,17 @@ from .data import load_all_files, split_files
 from .model import build_gru, make_physical_mae_metric
 from .evaluate import evaluate_r2, evaluate_per_file
 from .plotting import plot_loss_curves
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--window-size", type=int, default=cfg.WINDOW_SIZE)
+    p.add_argument("--gru-units", type=str, default=str(cfg.GRU_UNITS),
+                   help="comma-separated for stacked layers, e.g. 128,64,32")
+    p.add_argument("--dense-units", type=int, default=cfg.DENSE_UNITS)
+    p.add_argument("--tag", type=str, default=None,
+                   help="run identifier used in output filenames; auto-generated if omitted")
+    return p.parse_args()
 
 
 def set_seeds(seed):
@@ -38,6 +52,12 @@ def make_datasets(X_train_s, Y_train_n, X_test_s, Y_test_n, batch_size, seed):
 
 
 def main():
+    args = parse_args()
+    window_size = args.window_size
+    gru_units = [int(u) for u in args.gru_units.split(",")]
+    dense_units = args.dense_units
+    tag = args.tag or f"w{window_size}_g{'-'.join(map(str, gru_units))}_d{dense_units}"
+
     for gpu in tf.config.list_physical_devices("GPU"):
         tf.config.experimental.set_memory_growth(gpu, True)
 
@@ -46,6 +66,7 @@ def main():
 
     print(f"TF version : {tf.__version__}")
     print(f"GPUs       : {tf.config.list_physical_devices('GPU')}")
+    print(f"Run tag    : {tag}")
 
     train_paths, test_paths = split_files(cfg.DATA_DIR, cfg.TRAIN_RATIO, cfg.SEED)
     print(f"\nTrain files ({len(train_paths)}):")
@@ -56,9 +77,9 @@ def main():
         print(f"  {p}")
 
     print("\nLoading train files ...")
-    X_train, Y_train = load_all_files(train_paths, "train")
+    X_train, Y_train, target_names = load_all_files(train_paths, "train", window_size=window_size)
     print("\nLoading test files ...")
-    X_test, Y_test = load_all_files(test_paths, "test")
+    X_test, Y_test, _ = load_all_files(test_paths, "test", window_size=window_size)
 
     print("\nFitting scaler ...")
     N_tr, W, C = X_train.shape
@@ -78,13 +99,14 @@ def main():
     print(f"y_mean: {y_mean}")
     print(f"y_std:  {y_std}")
 
-    np.savez(cfg.NORM_STATS_OUT, x_mean=scaler.mean_, x_std=scaler.scale_,
+    norm_stats_out = f"normalisation_stats_gru_{tag}.npz"
+    np.savez(norm_stats_out, x_mean=scaler.mean_, x_std=scaler.scale_,
               y_mean=y_mean, y_std=y_std)
 
     train_ds, test_ds = make_datasets(X_train_s, Y_train_n, X_test_s, Y_test_n,
                                         cfg.BATCH_SIZE, cfg.SEED)
 
-    model = build_gru(cfg.WINDOW_SIZE, C, cfg.GRU_UNITS, cfg.DENSE_UNITS)
+    model = build_gru(window_size, C, gru_units, dense_units, n_outputs=len(target_names))
     model.summary()
 
     model.compile(
@@ -104,7 +126,7 @@ def main():
             restore_best_weights=True, verbose=1,
         ),
         keras.callbacks.ModelCheckpoint(
-            cfg.CHECKPOINT_OUT, monitor="val_loss", save_best_only=True, verbose=0,
+            f"best_gru_{tag}.keras", monitor="val_loss", save_best_only=True, verbose=0,
         ),
     ]
 
@@ -116,12 +138,13 @@ def main():
         callbacks=callbacks,
     )
 
-    evaluate_r2(model, X_test, Y_test, scaler, y_mean, y_std, label="test")
-    evaluate_per_file(model, test_paths, scaler, y_mean, y_std)
-    plot_loss_curves(history, cfg.LOSS_CURVE_OUT)
+    evaluate_r2(model, X_test, Y_test, scaler, y_mean, y_std, target_names, label="test")
+    evaluate_per_file(model, test_paths, scaler, y_mean, y_std, target_names)
+    plot_loss_curves(history, f"gru_loss_curve_{tag}.png")
 
-    model.save(cfg.MODEL_OUT)
-    print(f"Saved {cfg.MODEL_OUT} and {cfg.NORM_STATS_OUT}")
+    model_out = f"gru_{tag}.keras"
+    model.save(model_out)
+    print(f"Saved {model_out} and {norm_stats_out}")
 
 
 if __name__ == "__main__":
