@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 
 from . import config as cfg
 from .data import load_all_files, split_files
-from .model import build_gru, make_physical_mae_metric
+from .model import build_gru, make_group_mae_metrics
 from .evaluate import evaluate_r2, evaluate_per_file
 from .plotting import plot_loss_curves
 
@@ -112,7 +112,7 @@ def main():
     model.compile(
         optimizer=keras.optimizers.Adam(cfg.LR, clipnorm=cfg.CLIPNORM),
         loss="mae",
-        metrics=[make_physical_mae_metric(y_std)],
+        metrics=make_group_mae_metrics(y_std, target_names),
         steps_per_execution=cfg.STEPS_PER_EXECUTION,
     )
 

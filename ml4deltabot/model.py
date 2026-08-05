@@ -33,14 +33,35 @@ def build_gru(window_size, n_channels, gru_units, dense_units, n_outputs=3):
     return keras.Model(inp, out, name="DeltabotGRU")
 
 
-def make_physical_mae_metric(y_std):
-    """MAE in physical units, rather than normalised units. y_std is (n_outputs,)."""
+_GROUP_BY_PREFIX = {
+    "x_out": "position", "y_out": "position", "z_out": "position",
+    "vx": "velocity", "vy": "velocity", "vz": "velocity",
+    "x_in": "voltage", "y_in": "voltage", "z_in": "voltage",
+}
+
+
+def make_group_mae_metrics(y_std, target_names):
+    """
+    One MAE metric per target group (position/velocity), each in its
+    own physical units.
+    """
     y_std_t = tf.constant(y_std, dtype=tf.float32)
 
-    def physical_mae(y_true, y_pred):
-        y_true = tf.cast(y_true, tf.float32) * y_std_t
-        y_pred = tf.cast(y_pred, tf.float32) * y_std_t
-        return tf.reduce_mean(tf.abs(y_true - y_pred))
+    groups = {}
+    for i, name in enumerate(target_names):
+        groups.setdefault(_GROUP_BY_PREFIX.get(name, "other"), []).append(i)
 
-    physical_mae.__name__ = "physical_mae"
-    return physical_mae
+    metrics = []
+    for group, idxs in groups.items():
+        idxs_t = tf.constant(idxs, dtype=tf.int32)
+
+        def metric_fn(y_true, y_pred, idxs_t=idxs_t):
+            std = tf.gather(y_std_t, idxs_t)
+            yt = tf.gather(tf.cast(y_true, tf.float32), idxs_t, axis=1) * std
+            yp = tf.gather(tf.cast(y_pred, tf.float32), idxs_t, axis=1) * std
+            return tf.reduce_mean(tf.abs(yt - yp))
+
+        metric_fn.__name__ = f"physical_mae_{group}"
+        metrics.append(metric_fn)
+
+    return metrics
