@@ -22,7 +22,9 @@ TARGETS = ("position", "velocity")
 
 DT = 0.0001
 
-TOLERANCES = dict(position=10.0, velocity=50.0)
+TOLERANCES = dict(position=10.0, velocity=10.0 / DT)
+
+DISPLAY_UNITS = dict(position=("nm", 1.0), velocity=("mm/s", 1e-6))
 
 MODEL_OUT = "gru_64.keras"
 CHECKPOINT_OUT = "best_gru.keras"

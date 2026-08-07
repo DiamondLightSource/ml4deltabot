@@ -39,9 +39,12 @@ def evaluate_predictions(Y, Y_pred, target_names, label="test"):
         tol = cfg.TOLERANCES.get(group)
         pass_rate = (abs_err[:, i] <= tol).mean() * 100 if tol is not None else float("nan")
 
+        unit, scale = cfg.DISPLAY_UNITS.get(group, (group, 1.0))
+        tol_disp = tol * scale if tol is not None else None
         print(f"  {name:6s} [{group:8s}]  R2={r2:8.5f}  "
-              f"p50={p50:9.3f}  p90={p90:9.3f}  p95={p95:9.3f}  p99={p99:9.3f}  "
-              f"within_tol({tol})={pass_rate:5.1f}%")
+              f"p50={p50 * scale:9.3f}  p90={p90 * scale:9.3f}  "
+              f"p95={p95 * scale:9.3f}  p99={p99 * scale:9.3f} {unit:6s} "
+              f"within_tol({tol_disp}{unit})={pass_rate:5.1f}%")
 
     print(f"  overall R2: {r2_score(Y, Y_pred):.6f}")
     return abs_err
@@ -53,10 +56,10 @@ def evaluate_r2(model, X, Y, scaler_x, y_mean, y_std, target_names, label="test"
     return Y_pred
 
 
-def evaluate_per_file(model, test_paths, scaler_x, y_mean, y_std, target_names):
+def evaluate_per_file(model, test_paths, scaler_x, y_mean, y_std, target_names, window_size=cfg.WINDOW_SIZE):
     print("\nPer-file R² on test set:")
     for p in test_paths:
-        X, Y, _ = build_sequences(load_file(p), cfg.WINDOW_SIZE)
+        X, Y, _ = build_sequences(load_file(p), window_size)
         Y_pred = _predict(model, X, scaler_x, y_mean, y_std)
         scores = [r2_score(Y[:, i], Y_pred[:, i]) for i in range(len(target_names))]
         row = "  ".join(f"{n}={s:.4f}" for n, s in zip(target_names, scores))

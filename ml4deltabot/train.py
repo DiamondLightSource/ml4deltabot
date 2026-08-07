@@ -139,7 +139,7 @@ def main():
     )
 
     evaluate_r2(model, X_test, Y_test, scaler, y_mean, y_std, target_names, label="test")
-    evaluate_per_file(model, test_paths, scaler, y_mean, y_std, target_names)
+    evaluate_per_file(model, test_paths, scaler, y_mean, y_std, target_names, window_size=window_size)
     plot_loss_curves(history, f"gru_loss_curve_{tag}.png")
 
     model_out = f"gru_{tag}.keras"
