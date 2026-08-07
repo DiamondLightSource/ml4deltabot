@@ -1,3 +1,13 @@
+
+"""
+Trains the deltabot "plant" model: given a window of past voltage demand
+and resulting position, predicts the position and velocity at the next
+timestep. This is the forward model of the physical system's response —
+it's paired with a separate controller model (desired position -> voltage
+demand) to form a closed loop, where the plant's prediction lets the
+controller correct its next demand toward the target.
+"""
+
 import argparse
 import os
 
